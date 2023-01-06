@@ -8,6 +8,7 @@ use chrono::Local;
 use clap::{App, AppSettings, Arg, ArgMatches, Shell, SubCommand};
 use env_logger::Builder;
 use log::LevelFilter;
+use mdbook::build_opts::BuildOpts;
 use mdbook::utils;
 use std::env;
 use std::ffi::OsStr;
@@ -131,9 +132,17 @@ fn get_book_dir(args: &ArgMatches) -> PathBuf {
     }
 }
 
+fn get_build_opts(args: &ArgMatches) -> BuildOpts {
+    let language = args.value_of("language");
+
+    BuildOpts {
+        language_ident: language.map(String::from),
+    }
+}
+
 fn open<P: AsRef<OsStr>>(path: P) {
     info!("Opening web browser");
-    if let Err(e) = open::that(path) {
+    if let Err(e) = opener::open(path) {
         error!("Error opening web browser: {}", e);
     }
 }

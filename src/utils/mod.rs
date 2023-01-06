@@ -10,12 +10,40 @@ use pulldown_cmark::{html, CodeBlockKind, CowStr, Event, Options, Parser, Tag};
 
 use std::borrow::Cow;
 use std::fmt::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use self::string::{
     take_anchored_lines, take_lines, take_rustdoc_include_anchored_lines,
     take_rustdoc_include_lines,
 };
+
+/// Context for rendering markdown. This is used for fixing up links in the
+/// output if one is missing in a translation.
+#[derive(Clone, Debug)]
+pub struct RenderMarkdownContext {
+    /// Directory of the file being rendered, relative to the language's directory.
+    /// If the file is "src/en/chapter/README.md", it is "chapter".
+    pub path: PathBuf,
+    /// Absolute path to the source directory of the book being rendered, across
+    /// all languages.
+    /// If the file is "src/en/chapter/README.md", it is "src/".
+    pub src_dir: PathBuf,
+    /// Language of the book being rendered.
+    /// If the file is "src/en/chapter/README.md", it is "en".
+    /// If the book is not multilingual, it is `None`.
+    pub language: Option<String>,
+    /// Fallback language to use if a link is missing. This is configured in
+    /// `book.language` in the config.
+    /// If the book is not multilingual, it is `None`.
+    pub fallback_language: Option<String>,
+    /// If true, prepend the parent path to the link.
+    pub prepend_parent: bool,
+}
+
+lazy_static! {
+    static ref SCHEME_LINK: Regex = Regex::new(r"^[a-z][a-z0-9+.-]*:").unwrap();
+    static ref MD_LINK: Regex = Regex::new(r"(?P<link>.*)\.md(?P<anchor>#.*)?").unwrap();
+}
 
 /// Replaces multiple consecutive whitespace characters with a single space character.
 pub fn collapse_whitespace(text: &str) -> Cow<'_, str> {
@@ -48,19 +76,11 @@ pub fn id_from_content(content: &str) -> String {
     let mut content = content.to_string();
 
     // Skip any tags or html-encoded stuff
-    const REPL_SUB: &[&str] = &[
-        "<em>",
-        "</em>",
-        "<code>",
-        "</code>",
-        "<strong>",
-        "</strong>",
-        "&lt;",
-        "&gt;",
-        "&amp;",
-        "&#39;",
-        "&quot;",
-    ];
+    lazy_static! {
+        static ref HTML: Regex = Regex::new(r"(<.*?>)").unwrap();
+    }
+    content = HTML.replace_all(&content, "").into();
+    const REPL_SUB: &[&str] = &["&lt;", "&gt;", "&amp;", "&#39;", "&quot;"];
     for sub in REPL_SUB {
         content = content.replace(sub, "");
     }
@@ -69,6 +89,144 @@ pub fn id_from_content(content: &str) -> String {
     let trimmed = content.trim().trim_start_matches('#').trim();
 
     normalize_id(trimmed)
+}
+
+fn rewrite_if_missing<P: AsRef<Path>>(
+    fixed_link: &mut String,
+    path_to_dest: P,
+    dest: &str,
+    src_dir: &PathBuf,
+    language: &str,
+    fallback_language: &str,
+) {
+    // We are inside a multilingual book.
+    //
+    // `fixed_link` is a string relative to the current language directory, like
+    // "cli/README.md". Prepend the language's source directory (like "src/ja") and see
+    // if the file exists.
+    let mut path_on_disk = src_dir.clone();
+    path_on_disk.push(language);
+    path_on_disk.push(path_to_dest.as_ref());
+    path_on_disk.push(dest);
+
+    debug!("Checking if {} exists", path_on_disk.display());
+    if !path_on_disk.exists() {
+        // Now see if the file exists in the fallback language directory (like "src/en").
+        let mut fallback_path = src_dir.clone();
+        fallback_path.push(fallback_language);
+        fallback_path.push(path_to_dest.as_ref());
+        fallback_path.push(dest);
+
+        debug!(
+            "Not found, checking if fallback {} exists",
+            fallback_path.display()
+        );
+        if fallback_path.exists() {
+            // We can fall back to this link. Get enough parent directories to
+            // reach the root source directory, append the fallback language
+            // directory to it, the prepend the whole thing to the link.
+            let mut relative_path = PathBuf::from(path_to_dest.as_ref());
+            relative_path.push(dest);
+
+            let mut path_to_fallback_src = fs::path_to_root(&relative_path);
+            // One more parent directory out of language folder ("en")
+            write!(path_to_fallback_src, "../{}/", fallback_language).unwrap();
+
+            debug!(
+                "Rewriting link to be under fallback: {}",
+                path_to_fallback_src
+            );
+            fixed_link.insert_str(0, &path_to_fallback_src);
+        }
+    }
+}
+
+fn fix<'a>(dest: CowStr<'a>, ctx: Option<&RenderMarkdownContext>) -> CowStr<'a> {
+    if dest.starts_with('#') {
+        // Fragment-only link.
+        if let Some(ctx) = ctx {
+            if ctx.prepend_parent {
+                let mut base = ctx.path.display().to_string();
+                if base.ends_with(".md") {
+                    base.replace_range(base.len() - 3.., ".html");
+                }
+                return format!("{}{}", base, dest).into();
+            } else {
+                return dest;
+            }
+        } else {
+            return dest;
+        }
+    }
+    // Don't modify links with schemes like `https`.
+    if !SCHEME_LINK.is_match(&dest) {
+        // This is a relative link, adjust it as necessary.
+        let mut fixed_link = String::new();
+
+        if let Some(ctx) = ctx {
+            let base = ctx.path.parent().expect("path can't be empty");
+
+            // If the book is multilingual, check if the file actually
+            // exists, and if not rewrite the link to the fallback
+            // language's page.
+            if let Some(language) = &ctx.language {
+                if let Some(fallback_language) = &ctx.fallback_language {
+                    rewrite_if_missing(
+                        &mut fixed_link,
+                        &base,
+                        &dest,
+                        &ctx.src_dir,
+                        &language,
+                        &fallback_language,
+                    );
+                }
+            }
+
+            if ctx.prepend_parent {
+                let base = base.to_str().expect("utf-8 paths only");
+                if !base.is_empty() {
+                    write!(fixed_link, "{}/", base).unwrap();
+                }
+            }
+        }
+
+        if let Some(caps) = MD_LINK.captures(&dest) {
+            fixed_link.push_str(&caps["link"]);
+            fixed_link.push_str(".html");
+            if let Some(anchor) = caps.name("anchor") {
+                fixed_link.push_str(anchor.as_str());
+            }
+        } else {
+            fixed_link.push_str(&dest);
+        };
+
+        debug!("Fixed link: {:?}, {:?} => {:?}", dest, ctx, fixed_link);
+        return CowStr::from(fixed_link);
+    }
+    dest
+}
+
+fn fix_html<'a>(html: CowStr<'a>, ctx: Option<&RenderMarkdownContext>) -> CowStr<'a> {
+    // This is a terrible hack, but should be reasonably reliable. Nobody
+    // should ever parse a tag with a regex. However, there isn't anything
+    // in Rust that I know of that is suitable for handling partial html
+    // fragments like those generated by pulldown_cmark.
+    //
+    // There are dozens of HTML tags/attributes that contain paths, so
+    // feel free to add more tags if desired; these are the only ones I
+    // care about right now.
+    lazy_static! {
+        static ref HTML_LINK: Regex =
+            Regex::new(r#"(<(?:a|img) [^>]*?(?:src|href)=")([^"]+?)""#).unwrap();
+    }
+
+    HTML_LINK
+        .replace_all(&html, move |caps: &regex::Captures<'_>| {
+            let fixed = fix(caps[2].into(), ctx);
+            format!("{}{}\"", &caps[1], fixed)
+        })
+        .into_owned()
+        .into()
 }
 
 /// Fix links to the correct location.
@@ -80,85 +238,15 @@ pub fn id_from_content(content: &str) -> String {
 /// page go to the original location. Normal page rendering sets `path` to
 /// None. Ideally, print page links would link to anchors on the print page,
 /// but that is very difficult.
-fn adjust_links<'a>(event: Event<'a>, path: Option<&Path>) -> Event<'a> {
-    lazy_static! {
-        static ref SCHEME_LINK: Regex = Regex::new(r"^[a-z][a-z0-9+.-]*:").unwrap();
-        static ref MD_LINK: Regex = Regex::new(r"(?P<link>.*)\.md(?P<anchor>#.*)?").unwrap();
-    }
-
-    fn fix<'a>(dest: CowStr<'a>, path: Option<&Path>) -> CowStr<'a> {
-        if dest.starts_with('#') {
-            // Fragment-only link.
-            if let Some(path) = path {
-                let mut base = path.display().to_string();
-                if base.ends_with(".md") {
-                    base.replace_range(base.len() - 3.., ".html");
-                }
-                return format!("{}{}", base, dest).into();
-            } else {
-                return dest;
-            }
-        }
-        // Don't modify links with schemes like `https`.
-        if !SCHEME_LINK.is_match(&dest) {
-            // This is a relative link, adjust it as necessary.
-            let mut fixed_link = String::new();
-            if let Some(path) = path {
-                let base = path
-                    .parent()
-                    .expect("path can't be empty")
-                    .to_str()
-                    .expect("utf-8 paths only");
-                if !base.is_empty() {
-                    write!(fixed_link, "{}/", base).unwrap();
-                }
-            }
-
-            if let Some(caps) = MD_LINK.captures(&dest) {
-                fixed_link.push_str(&caps["link"]);
-                fixed_link.push_str(".html");
-                if let Some(anchor) = caps.name("anchor") {
-                    fixed_link.push_str(anchor.as_str());
-                }
-            } else {
-                fixed_link.push_str(&dest);
-            };
-            return CowStr::from(fixed_link);
-        }
-        dest
-    }
-
-    fn fix_html<'a>(html: CowStr<'a>, path: Option<&Path>) -> CowStr<'a> {
-        // This is a terrible hack, but should be reasonably reliable. Nobody
-        // should ever parse a tag with a regex. However, there isn't anything
-        // in Rust that I know of that is suitable for handling partial html
-        // fragments like those generated by pulldown_cmark.
-        //
-        // There are dozens of HTML tags/attributes that contain paths, so
-        // feel free to add more tags if desired; these are the only ones I
-        // care about right now.
-        lazy_static! {
-            static ref HTML_LINK: Regex =
-                Regex::new(r#"(<(?:a|img) [^>]*?(?:src|href)=")([^"]+?)""#).unwrap();
-        }
-
-        HTML_LINK
-            .replace_all(&html, |caps: &regex::Captures<'_>| {
-                let fixed = fix(caps[2].into(), path);
-                format!("{}{}\"", &caps[1], fixed)
-            })
-            .into_owned()
-            .into()
-    }
-
+fn adjust_links<'a>(event: Event<'a>, ctx: Option<&RenderMarkdownContext>) -> Event<'a> {
     match event {
         Event::Start(Tag::Link(link_type, dest, title)) => {
-            Event::Start(Tag::Link(link_type, fix(dest, path), title))
+            Event::Start(Tag::Link(link_type, fix(dest, ctx), title))
         }
         Event::Start(Tag::Image(link_type, dest, title)) => {
-            Event::Start(Tag::Image(link_type, fix(dest, path), title))
+            Event::Start(Tag::Image(link_type, fix(dest, ctx), title))
         }
-        Event::Html(html) => Event::Html(fix_html(html, path)),
+        Event::Html(html) => Event::Html(fix_html(html, ctx)),
         _ => event,
     }
 }
@@ -168,61 +256,31 @@ pub fn render_markdown(text: &str, curly_quotes: bool) -> String {
     render_markdown_with_path(text, curly_quotes, None)
 }
 
-pub fn new_cmark_parser(text: &str) -> Parser<'_> {
+pub fn new_cmark_parser(text: &str, curly_quotes: bool) -> Parser<'_, '_> {
     let mut opts = Options::empty();
     opts.insert(Options::ENABLE_TABLES);
     opts.insert(Options::ENABLE_FOOTNOTES);
     opts.insert(Options::ENABLE_STRIKETHROUGH);
     opts.insert(Options::ENABLE_TASKLISTS);
+    if curly_quotes {
+        opts.insert(Options::ENABLE_SMART_PUNCTUATION);
+    }
     Parser::new_ext(text, opts)
 }
 
-pub fn render_markdown_with_path(text: &str, curly_quotes: bool, path: Option<&Path>) -> String {
+pub fn render_markdown_with_path(
+    text: &str,
+    curly_quotes: bool,
+    ctx: Option<&RenderMarkdownContext>,
+) -> String {
     let mut s = String::with_capacity(text.len() * 3 / 2);
-    let p = new_cmark_parser(text);
-    let mut converter = EventQuoteConverter::new(curly_quotes);
+    let p = new_cmark_parser(text, curly_quotes);
     let events = p
         .map(clean_codeblock_headers)
-        .map(|event| adjust_links(event, path))
-        .map(|event| converter.convert(event));
+        .map(|event| adjust_links(event, ctx));
 
     html::push_html(&mut s, events);
     s
-}
-
-struct EventQuoteConverter {
-    enabled: bool,
-    convert_text: bool,
-}
-
-impl EventQuoteConverter {
-    fn new(enabled: bool) -> Self {
-        EventQuoteConverter {
-            enabled,
-            convert_text: true,
-        }
-    }
-
-    fn convert<'a>(&mut self, event: Event<'a>) -> Event<'a> {
-        if !self.enabled {
-            return event;
-        }
-
-        match event {
-            Event::Start(Tag::CodeBlock(_)) => {
-                self.convert_text = false;
-                event
-            }
-            Event::End(Tag::CodeBlock(_)) => {
-                self.convert_text = true;
-                event
-            }
-            Event::Text(ref text) if self.convert_text => {
-                Event::Text(CowStr::from(convert_quotes_to_curly(text)))
-            }
-            _ => event,
-        }
-    }
 }
 
 fn clean_codeblock_headers(event: Event<'_>) -> Event<'_> {
@@ -243,38 +301,6 @@ fn clean_codeblock_headers(event: Event<'_>) -> Event<'_> {
     }
 }
 
-fn convert_quotes_to_curly(original_text: &str) -> String {
-    // We'll consider the start to be "whitespace".
-    let mut preceded_by_whitespace = true;
-
-    original_text
-        .chars()
-        .map(|original_char| {
-            let converted_char = match original_char {
-                '\'' => {
-                    if preceded_by_whitespace {
-                        '‘'
-                    } else {
-                        '’'
-                    }
-                }
-                '"' => {
-                    if preceded_by_whitespace {
-                        '“'
-                    } else {
-                        '”'
-                    }
-                }
-                _ => original_char,
-            };
-
-            preceded_by_whitespace = original_char.is_whitespace();
-
-            converted_char
-        })
-        .collect()
-}
-
 /// Prints a "backtrace" of some `Error`.
 pub fn log_backtrace(e: &Error) {
     error!("Error: {}", e);
@@ -287,7 +313,7 @@ pub fn log_backtrace(e: &Error) {
 #[cfg(test)]
 mod tests {
     mod render_markdown {
-        use super::super::render_markdown;
+        use super::super::{fix, render_markdown, RenderMarkdownContext};
 
         #[test]
         fn preserves_external_links() {
@@ -404,6 +430,77 @@ more text with spaces
             assert_eq!(render_markdown(input, false), expected);
             assert_eq!(render_markdown(input, true), expected);
         }
+
+        use std::fs;
+        use std::fs::File;
+        use std::io::Write;
+        use std::path::PathBuf;
+        use tempfile;
+
+        #[test]
+        fn test_link_rewriting() {
+            use pulldown_cmark::CowStr;
+
+            let _ = env_logger::builder().is_test(true).try_init();
+            let test = |dest, path, exists, expected| {
+                let src_dir = tempfile::tempdir().unwrap();
+                let path = PathBuf::from(path);
+
+                let ctx = if exists {
+                    Some(RenderMarkdownContext {
+                        path: path,
+                        src_dir: PathBuf::new(),
+                        language: None,
+                        fallback_language: None,
+                        prepend_parent: false,
+                    })
+                } else {
+                    let localized_dir = src_dir.path().join("ja");
+                    fs::create_dir_all(&localized_dir).unwrap();
+
+                    let fallback_dir = src_dir.path().join("en");
+                    fs::create_dir_all(&fallback_dir).unwrap();
+
+                    let chapter_path = fallback_dir.join(path.parent().unwrap()).join(dest);
+                    fs::create_dir_all(chapter_path.parent().unwrap()).unwrap();
+                    debug!("Create: {}", chapter_path.display());
+                    File::create(&chapter_path)
+                        .unwrap()
+                        .write_all(b"# Chapter")
+                        .unwrap();
+
+                    Some(RenderMarkdownContext {
+                        path: path,
+                        src_dir: PathBuf::from(src_dir.path()),
+                        language: Some(String::from("ja")),
+                        fallback_language: Some(String::from("en")),
+                        prepend_parent: false,
+                    })
+                };
+
+                assert_eq!(
+                    fix(CowStr::from(dest), ctx.as_ref()),
+                    CowStr::from(expected)
+                );
+            };
+
+            test("../b/summary.md", "a/index.md", true, "../b/summary.html");
+            test(
+                "../b/summary.md",
+                "a/index.md",
+                false,
+                "../../en/../b/summary.html",
+            );
+            test("../c/summary.md", "a/b/index.md", true, "../c/summary.html");
+            test(
+                "../c/summary.md",
+                "a/b/index.md",
+                false,
+                "../../../en/../c/summary.html",
+            );
+            test("#translations", "config.md", true, "#translations");
+            test("#translations", "config.md", false, "#translations");
+        }
     }
 
     mod html_munging {
@@ -417,6 +514,10 @@ more text with spaces
             );
             assert_eq!(id_from_content("## **Bold** title"), "bold-title");
             assert_eq!(id_from_content("## `Code` title"), "code-title");
+            assert_eq!(
+                id_from_content("## title <span dir=rtl>foo</span>"),
+                "title-foo"
+            );
         }
 
         #[test]
@@ -448,25 +549,6 @@ more text with spaces
             assert_eq!(normalize_id("にほんご"), "にほんご");
             assert_eq!(normalize_id("한국어"), "한국어");
             assert_eq!(normalize_id(""), "");
-        }
-    }
-
-    mod convert_quotes_to_curly {
-        use super::super::convert_quotes_to_curly;
-
-        #[test]
-        fn it_converts_single_quotes() {
-            assert_eq!(convert_quotes_to_curly("'one', 'two'"), "‘one’, ‘two’");
-        }
-
-        #[test]
-        fn it_converts_double_quotes() {
-            assert_eq!(convert_quotes_to_curly(r#""one", "two""#), "“one”, “two”");
-        }
-
-        #[test]
-        fn it_treats_tab_as_whitespace() {
-            assert_eq!(convert_quotes_to_curly("\t'one'"), "\t‘one’");
         }
     }
 }
