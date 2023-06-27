@@ -9,10 +9,10 @@
 //! # Examples
 //!
 //! ```rust
-//! # use mdbook::errors::*;
+//! # use dioxus_mdbook::errors::*;
 //! use std::path::PathBuf;
 //! use std::str::FromStr;
-//! use mdbook::Config;
+//! use dioxus_mdbook::Config;
 //! use toml::Value;
 //!
 //! # fn run() -> Result<()> {

@@ -1,7 +1,7 @@
 use crate::{get_book_dir, get_build_opts};
 use anyhow::Context;
 use clap::{App, ArgMatches, SubCommand};
-use mdbook::MDBook;
+use dioxus_mdbook::MDBook;
 use std::fs;
 
 // Create clap subcommand arguments
@@ -26,7 +26,7 @@ pub fn make_subcommand<'a, 'b>() -> App<'a, 'b> {
 }
 
 // Clean command implementation
-pub fn execute(args: &ArgMatches) -> mdbook::errors::Result<()> {
+pub fn execute(args: &ArgMatches) -> dioxus_mdbook::errors::Result<()> {
     let book_dir = get_book_dir(args);
     let build_opts = get_build_opts(args);
     let book = MDBook::load_with_build_opts(&book_dir, build_opts)?;

@@ -1,13 +1,13 @@
 mod dummy_book;
 
 use crate::dummy_book::DummyBook;
-use mdbook::book::Book;
-use mdbook::build_opts::BuildOpts;
-use mdbook::config::Config;
-use mdbook::errors::*;
-use mdbook::preprocess::{Preprocessor, PreprocessorContext};
-use mdbook::renderer::{RenderContext, Renderer};
-use mdbook::MDBook;
+use dioxus_mdbook::book::Book;
+use dioxus_mdbook::build_opts::BuildOpts;
+use dioxus_mdbook::config::Config;
+use dioxus_mdbook::errors::*;
+use dioxus_mdbook::preprocess::{Preprocessor, PreprocessorContext};
+use dioxus_mdbook::renderer::{RenderContext, Renderer};
+use dioxus_mdbook::MDBook;
 use std::sync::{Arc, Mutex};
 
 struct Spy(Arc<Mutex<Inner>>);

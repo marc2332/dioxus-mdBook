@@ -1,7 +1,7 @@
 use crate::{get_book_dir, get_build_opts, open};
 use clap::{App, ArgMatches, SubCommand};
-use mdbook::errors::Result;
-use mdbook::MDBook;
+use dioxus_mdbook::errors::Result;
+use dioxus_mdbook::MDBook;
 
 // Create clap subcommand arguments
 pub fn make_subcommand<'a, 'b>() -> App<'a, 'b> {

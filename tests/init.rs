@@ -1,5 +1,5 @@
-use mdbook::config::Config;
-use mdbook::MDBook;
+use dioxus_mdbook::config::Config;
+use dioxus_mdbook::MDBook;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;

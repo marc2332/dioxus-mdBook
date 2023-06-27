@@ -173,8 +173,8 @@ impl MDBook {
     /// `(section: String, bookitem: &BookItem)`
     ///
     /// ```no_run
-    /// # use mdbook::MDBook;
-    /// # use mdbook::book::BookItem;
+    /// # use dioxus_mdbook::MDBook;
+    /// # use dioxus_mdbook::book::BookItem;
     /// # let book = MDBook::load("mybook").unwrap();
     /// for item in book.iter() {
     ///     match *item {

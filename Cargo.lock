@@ -248,6 +248,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "dioxus-mdbook"
+version = "0.4.15"
+dependencies = [
+ "ammonia",
+ "anyhow",
+ "assert_cmd",
+ "chrono",
+ "clap",
+ "elasticlunr-rs",
+ "env_logger",
+ "futures-util",
+ "gitignore",
+ "handlebars",
+ "http",
+ "lazy_static",
+ "log",
+ "memchr",
+ "notify",
+ "opener",
+ "predicates",
+ "pretty_assertions",
+ "pulldown-cmark",
+ "regex",
+ "select",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "shlex",
+ "tempfile",
+ "tokio",
+ "toml",
+ "topological-sort",
+ "walkdir",
+ "warp",
+]
+
+[[package]]
 name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -827,44 +865,6 @@ name = "matches"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e378b66a060d48947b590737b30a1be76706c8dd7b8ba0f2fe3989c68a853f"
-
-[[package]]
-name = "dioxus-mdbook"
-version = "0.4.15"
-dependencies = [
- "ammonia",
- "anyhow",
- "assert_cmd",
- "chrono",
- "clap",
- "elasticlunr-rs",
- "env_logger",
- "futures-util",
- "gitignore",
- "handlebars",
- "http",
- "lazy_static",
- "log",
- "memchr",
- "notify",
- "opener",
- "predicates",
- "pretty_assertions",
- "pulldown-cmark",
- "regex",
- "select",
- "semver",
- "serde",
- "serde_derive",
- "serde_json",
- "shlex",
- "tempfile",
- "tokio",
- "toml",
- "topological-sort",
- "walkdir",
- "warp",
-]
 
 [[package]]
 name = "memchr"

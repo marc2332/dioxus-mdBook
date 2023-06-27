@@ -1,7 +1,7 @@
 //! Some integration tests to make sure the `SUMMARY.md` parser can deal with
 //! some real-life examples.
 
-use mdbook::book;
+use dioxus_mdbook::book;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;

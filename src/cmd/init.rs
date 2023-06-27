@@ -1,8 +1,8 @@
 use crate::get_book_dir;
 use clap::{App, Arg, ArgMatches, SubCommand};
-use mdbook::config;
-use mdbook::errors::Result;
-use mdbook::MDBook;
+use dioxus_mdbook::config;
+use dioxus_mdbook::errors::Result;
+use dioxus_mdbook::MDBook;
 use std::io;
 use std::io::Write;
 use std::process::Command;

@@ -6,11 +6,11 @@ mod dummy_book;
 use crate::dummy_book::{assert_contains_strings, assert_doesnt_contain_strings, DummyBook};
 
 use anyhow::Context;
-use mdbook::build_opts::BuildOpts;
-use mdbook::config::Config;
-use mdbook::errors::*;
-use mdbook::utils::fs::write_file;
-use mdbook::MDBook;
+use dioxus_mdbook::build_opts::BuildOpts;
+use dioxus_mdbook::config::Config;
+use dioxus_mdbook::errors::*;
+use dioxus_mdbook::utils::fs::write_file;
+use dioxus_mdbook::MDBook;
 use select::document::Document;
 use select::predicate::{Class, Name, Predicate};
 use std::collections::HashMap;
@@ -456,7 +456,7 @@ fn theme_dir_overrides_work_correctly() {
     let book_dir = book_dir.path();
     let theme_dir = book_dir.join("theme");
 
-    let mut index = mdbook::theme::INDEX.to_vec();
+    let mut index = dioxus_mdbook::theme::INDEX.to_vec();
     index.extend_from_slice(b"\n<!-- This is a modified index.hbs! -->");
 
     write_file(&theme_dir, "index.hbs", &index).unwrap();
@@ -607,7 +607,7 @@ fn remove_absolute_components(path: &Path) -> impl Iterator<Item = Component> + 
 #[cfg(feature = "search")]
 mod search {
     use crate::dummy_book::DummyBook;
-    use mdbook::MDBook;
+    use dioxus_mdbook::MDBook;
     use std::fs::{self, File};
     use std::path::Path;
 

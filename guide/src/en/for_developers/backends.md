@@ -36,7 +36,7 @@ This is all the boilerplate necessary for our backend to load the book.
 extern crate mdbook;
 
 use std::io;
-use mdbook::renderer::RenderContext;
+use dioxus_mdbook::renderer::RenderContext;
 
 fn main() {
     let mut stdin = io::stdin();
@@ -232,8 +232,8 @@ in [`RenderContext`].
 + use std::fs::{self, File};
 + use std::io::{self, Write};
 - use std::io;
-  use mdbook::renderer::RenderContext;
-  use mdbook::book::{BookItem, Chapter};
+  use dioxus_mdbook::renderer::RenderContext;
+  use dioxus_mdbook::book::{BookItem, Chapter};
 
   fn main() {
     ...

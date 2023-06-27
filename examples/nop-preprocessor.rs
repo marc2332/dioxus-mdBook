@@ -1,8 +1,8 @@
 use crate::nop_lib::Nop;
 use clap::{App, Arg, ArgMatches, SubCommand};
-use mdbook::book::Book;
-use mdbook::errors::Error;
-use mdbook::preprocess::{CmdPreprocessor, Preprocessor, PreprocessorContext};
+use dioxus_mdbook::book::Book;
+use dioxus_mdbook::errors::Error;
+use dioxus_mdbook::preprocess::{CmdPreprocessor, Preprocessor, PreprocessorContext};
 use semver::{Version, VersionReq};
 use std::io;
 use std::process;
@@ -42,7 +42,7 @@ fn handle_preprocessing(pre: &dyn Preprocessor) -> Result<(), Error> {
             "Warning: The {} plugin was built against version {} of mdbook, \
              but we're being called from version {}",
             pre.name(),
-            mdbook::MDBOOK_VERSION,
+            dioxus_mdbook::MDBOOK_VERSION,
             ctx.mdbook_version
         );
     }

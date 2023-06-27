@@ -1,8 +1,8 @@
 mod dummy_book;
 
 use crate::dummy_book::DummyBook;
-use mdbook::preprocess::{CmdPreprocessor, Preprocessor};
-use mdbook::MDBook;
+use dioxus_mdbook::preprocess::{CmdPreprocessor, Preprocessor};
+use dioxus_mdbook::MDBook;
 
 fn example() -> CmdPreprocessor {
     CmdPreprocessor::new(

@@ -28,8 +28,8 @@
 //! the `MDBook::init()` method.
 //!
 //! ```rust,no_run
-//! use mdbook::MDBook;
-//! use mdbook::config::Config;
+//! use dioxus_mdbook::MDBook;
+//! use dioxus_mdbook::config::Config;
 //!
 //! let root_dir = "/path/to/book/root";
 //!
@@ -48,7 +48,7 @@
 //! You can also load an existing book and build it.
 //!
 //! ```rust,no_run
-//! use mdbook::MDBook;
+//! use dioxus_mdbook::MDBook;
 //!
 //! let root_dir = "/path/to/book/root";
 //!
