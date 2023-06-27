@@ -65,4 +65,4 @@ search = ["elasticlunr-rs", "ammonia"]
 
 [[bin]]
 doc = false
-name = "mdbook"
+name = "dioxus-mdbook"
