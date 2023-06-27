@@ -1,5 +1,5 @@
 [package]
-name = "mdbook"
+name = "dioxus-mdbook"
 version = "0.4.15"
 authors = [
     "Mathieu David <mathieudavid@mathieudavid.org>",
